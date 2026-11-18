@@ -1,0 +1,58 @@
+Python: handoff simulation with hysteresis 
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+rng = np.random.default_rng(42)
+positions_m = np.linspace(0, 1000, 400)
+base_station_a_m, base_station_b_m = 0.0, 1000.0
+reference_power_dbm = -45.0
+path_loss_exponent = 2.4
+noise_std_db = 3.0
+
+
+def measured_signal_dbm(distance_m, noise_db):
+    distance_m = np.maximum(np.asarray(distance_m), 1.0)
+    return reference_power_dbm - 10 * path_loss_exponent * np.log10(distance_m) + noise_db
+
+signal_a = measured_signal_dbm(abs(positions_m - base_station_a_m),
+                               rng.normal(0, noise_std_db, len(positions_m)))
+signal_b = measured_signal_dbm(abs(positions_m - base_station_b_m),
+                               rng.normal(0, noise_std_db, len(positions_m)))
+
+
+def simulate_handoffs(a, b, hysteresis_db):
+    serving = 0  # 0 = cell A, 1 = cell B
+    serving_history = []
+    handoff_positions = []
+    for x, a_dbm, b_dbm in zip(positions_m, a, b):
+        if serving == 0 and b_dbm > a_dbm + hysteresis_db:
+            serving = 1
+            handoff_positions.append(x)
+        elif serving == 1 and a_dbm > b_dbm + hysteresis_db:
+            serving = 0
+            handoff_positions.append(x)
+        serving_history.append(serving)
+    return np.array(serving_history), handoff_positions
+
+settings = [0, 3, 6]
+histories = {}
+for h in settings:
+    history, switch_points = simulate_handoffs(signal_a, signal_b, h)
+    histories[h] = history
+    print(f"Hysteresis: {h} dB | handoffs: {len(switch_points)} "
+          f"| final serving cell: {'A' if history[-1] == 0 else 'B'}")
+
+fig, axs = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
+axs[0].plot(positions_m, signal_a, label="Cell A measured signal")
+axs[0].plot(positions_m, signal_b, label="Cell B measured signal")
+axs[0].set(ylabel="Signal power (dBm)", title="Handoff with measurement fluctuations")
+axs[0].legend()
+for h, history in histories.items():
+    axs[1].step(positions_m, history + 0.08 * (h / 3 - 1), where="post", label=f"H = {h} dB")
+axs[1].set(xlabel="Mobile position (m)", ylabel="Serving cell (A=0, B=1)", yticks=[0, 1])
+axs[1].legend()
+for ax in axs:
+    ax.grid(alpha=0.25)
+fig.tight_layout()
+plt.show()
