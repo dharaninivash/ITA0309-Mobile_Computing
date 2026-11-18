@@ -1,0 +1,66 @@
+Python: effect of the OFDMA downlink scheduler on user throughput and fairness 
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+rng = np.random.default_rng(11)
+num_users = 6
+num_slots = 250
+resource_blocks_per_slot = 18
+rb_bandwidth_hz = 180_000  # illustrative LTE-sized RB bandwidth
+slot_length_s = 0.001
+base_efficiency = np.array([0.7, 1.0, 1.4, 1.8, 2.5, 3.2])  # bits/s/Hz
+
+# Same channel conditions are reused across schedulers for a fair comparison.
+fading = rng.lognormal(mean=-0.07, sigma=0.45,
+                       size=(num_slots, resource_blocks_per_slot, num_users))
+spectral_efficiency = np.clip(base_efficiency[None, None, :] * fading, 0.1, 7.0)
+rb_rate_mbps = rb_bandwidth_hz * spectral_efficiency / 1_000_000
+
+
+def jain_index(values):
+    values = np.asarray(values, dtype=float)
+    return (values.sum() ** 2) / (len(values) * np.sum(values ** 2)) if np.any(values) else 0.0
+
+
+def run_scheduler(method):
+    sum_slot_rates = np.zeros(num_users)
+    smoothed_rate = np.full(num_users, 0.15)  # avoids division by zero at start
+    averaging_factor = 0.04
+    for slot in range(num_slots):
+        rates_this_slot = np.zeros(num_users)
+        for rb in range(resource_blocks_per_slot):
+            candidates = rb_rate_mbps[slot, rb]
+            if method == "Round Robin":
+                chosen = (slot * resource_blocks_per_slot + rb) % num_users
+            elif method == "Max Throughput":
+                chosen = int(np.argmax(candidates))
+            elif method == "Proportional Fair":
+                chosen = int(np.argmax(candidates / np.maximum(smoothed_rate, 0.01)))
+            else:
+                raise ValueError("Unknown scheduling method")
+            rates_this_slot[chosen] += candidates[chosen]
+        sum_slot_rates += rates_this_slot
+        smoothed_rate = ((1 - averaging_factor) * smoothed_rate
+                         + averaging_factor * rates_this_slot)
+    # Each entry is the time-average per-user throughput in Mbps.
+    return sum_slot_rates / num_slots
+
+methods = ["Round Robin", "Max Throughput", "Proportional Fair"]
+results = {method: run_scheduler(method) for method in methods}
+print("Scheduling policy       Sum rate (Mbps)   Jain's fairness")
+for method, rates in results.items():
+    print(f"{method:20s} {rates.sum():15.2f} {jain_index(rates):17.3f}")
+
+x = np.arange(num_users)
+width = 0.25
+plt.figure(figsize=(10, 4.8))
+for offset, method in enumerate(methods):
+    plt.bar(x + (offset - 1) * width, results[method], width, label=method)
+plt.xticks(x, [f"User {i+1}" for i in x])
+plt.ylabel("Average user throughput (Mbps)")
+plt.title("OFDMA scheduling: throughput vs fairness")
+plt.grid(axis="y", alpha=0.25)
+plt.legend()
+plt.tight_layout()
+plt.show()
