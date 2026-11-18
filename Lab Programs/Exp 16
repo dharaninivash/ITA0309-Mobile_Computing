@@ -1,0 +1,49 @@
+Python: free-space path loss and received power 
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+def fspl_db(distance_km, frequency_mhz):
+    """Free-space path loss, with distance in km and frequency in MHz."""
+    d = np.asarray(distance_km, dtype=float)
+    if np.any(d <= 0) or frequency_mhz <= 0:
+        raise ValueError("Distance and frequency must be positive.")
+    return 32.44 + 20 * np.log10(d) + 20 * np.log10(frequency_mhz)
+
+
+def received_power_dbm(tx_dbm, tx_gain_dbi, rx_gain_dbi, loss_db, path_loss_db):
+    return tx_dbm + tx_gain_dbi + rx_gain_dbi - loss_db - path_loss_db
+
+
+frequency_mhz = 1800.0
+transmit_power_dbm = 30.0
+transmit_gain_dbi = 12.0
+receive_gain_dbi = 0.0
+other_losses_db = 2.0
+reference_distance_km = 1.0
+
+loss_at_reference = fspl_db(reference_distance_km, frequency_mhz)
+received_at_reference = received_power_dbm(
+    transmit_power_dbm, transmit_gain_dbi, receive_gain_dbi,
+    other_losses_db, loss_at_reference
+)
+print(f"Frequency: {frequency_mhz:.0f} MHz; Distance: {reference_distance_km:.1f} km")
+print(f"Free-space path loss: {loss_at_reference:.2f} dB")
+print(f"Received power: {received_at_reference:.2f} dBm")
+
+distances_km = np.linspace(0.1, 10, 250)
+losses_db = fspl_db(distances_km, frequency_mhz)
+received_dbm = received_power_dbm(
+    transmit_power_dbm, transmit_gain_dbi, receive_gain_dbi,
+    other_losses_db, losses_db
+)
+fig, axs = plt.subplots(1, 2, figsize=(11, 4))
+axs[0].plot(distances_km, losses_db)
+axs[0].set(title="Free-space path loss", xlabel="Distance (km)", ylabel="FSPL (dB)")
+axs[1].plot(distances_km, received_dbm)
+axs[1].set(title="Received power vs distance", xlabel="Distance (km)", ylabel="Power (dBm)")
+for ax in axs:
+    ax.grid(alpha=0.3)
+fig.tight_layout()
+plt.show()
