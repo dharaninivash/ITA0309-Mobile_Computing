@@ -1,0 +1,39 @@
+Python: call blocking probability using the Erlang B formula 
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+def erlang_b(offered_load_erlangs, channels):
+    """Stable Erlang B recursion; channels is a nonnegative integer."""
+    if channels < 0 or int(channels) != channels or offered_load_erlangs < 0:
+        raise ValueError("Channels must be a nonnegative integer and load >= 0.")
+    blocking = 1.0
+    for k in range(1, int(channels) + 1):
+        blocking = offered_load_erlangs * blocking / (k + offered_load_erlangs * blocking)
+    return blocking
+
+loads = np.linspace(0, 35, 351)
+channel_counts = [10, 15, 20]
+print("Erlang B blocking at 10 Erlangs offered load:")
+for channels in channel_counts:
+    print(f"  {channels:2d} channels: {erlang_b(10, channels):.4%}")
+
+threshold = 0.02
+for channels in channel_counts:
+    eligible = [load for load in loads if erlang_b(load, channels) <= threshold]
+    print(f"Maximum offered traffic at <= 2% blocking ({channels} channels): "
+          f"approximately {max(eligible):.1f} Erlangs")
+
+plt.figure(figsize=(9, 4.8))
+for channels in channel_counts:
+    plt.plot(loads, [erlang_b(a, channels) for a in loads], label=f"{channels} channels")
+plt.axhline(threshold, linestyle="--", label="2% blocking target")
+plt.title("Call blocking versus offered traffic (Erlang B)")
+plt.xlabel("Offered load (Erlangs)")
+plt.ylabel("Call blocking probability")
+plt.ylim(0, 1)
+plt.grid(alpha=0.3)
+plt.legend()
+plt.tight_layout()
+plt.show()
