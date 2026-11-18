@@ -1,0 +1,50 @@
+Python: Code Division Multiple Access (CDMA): spreading and despreading 
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+rng = np.random.default_rng(7)
+user1_bits = np.array([1, 0, 1, 1, 0])
+user2_bits = np.array([0, 1, 0, 1, 1])
+code1 = np.array([1, 1, 1, 1, 1, 1, 1, 1])
+code2 = np.array([1, -1, 1, -1, 1, -1, 1, -1])
+chips_per_bit = len(code1)
+assert np.dot(code1, code2) == 0, "Spreading codes must be orthogonal."
+
+
+def spread(bits, code):
+    symbols = 2 * bits - 1  # 0 -> -1, 1 -> +1 (BPSK)
+    return np.concatenate([symbol * code for symbol in symbols])
+
+
+def despread(received, code):
+    blocks = received.reshape(-1, len(code))
+    correlations = blocks @ code / len(code)
+    return (correlations >= 0).astype(int), correlations
+
+signal1 = spread(user1_bits, code1)
+signal2 = spread(user2_bits, code2)
+noise = rng.normal(0, 0.35, len(signal1))
+received = signal1 + signal2 + noise
+recovered1, corr1 = despread(received, code1)
+recovered2, corr2 = despread(received, code2)
+print("User 1 original: ", user1_bits.tolist())
+print("User 1 recovered:", recovered1.tolist())
+print("User 2 original: ", user2_bits.tolist())
+print("User 2 recovered:", recovered2.tolist())
+print("User 1 bit accuracy:", f"{np.mean(recovered1 == user1_bits):.0%}")
+print("User 2 bit accuracy:", f"{np.mean(recovered2 == user2_bits):.0%}")
+
+fig, axs = plt.subplots(2, 1, figsize=(10, 5.5))
+axs[0].step(np.arange(len(received)), received, where="mid")
+axs[0].set(title="Combined noisy CDMA signal", ylabel="Chip amplitude")
+axs[1].plot(corr1, marker="o", label="User 1 despread correlation")
+axs[1].plot(corr2, marker="s", label="User 2 despread correlation")
+axs[1].axhline(0, linestyle="--")
+axs[1].set(xlabel="Bit index", ylabel="Correlation")
+axs[1].legend()
+for ax in axs:
+    ax.grid(alpha=0.3)
+fig.tight_layout()
+plt.show()
